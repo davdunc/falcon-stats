@@ -1,0 +1,21 @@
+[project]
+name = "falcon-stats"
+version = "0.1.0"
+description = "Trading statistics manager — ingest, compute, store, publish"
+requires-python = ">=3.11"
+dependencies = [
+    "boto3>=1.42",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+notion = [
+    "requests>=2.31",
+]
+
+[project.scripts]
+falcon-stats = "falcon_stats.cli:main"
