@@ -228,14 +228,7 @@ class DailyStats:
 
     @property
     def avg_r(self) -> float | None:
-        rs = self.r_multiples
-        if not rs:
-            return None
-        return sum(rs) / len(rs)
-
-    @property
-    def expectancy_r(self) -> float | None:
-        """Expected R per trade — the systematic trader's key metric."""
+        """Average R-multiple per trade — the systematic trader's key metric."""
         rs = self.r_multiples
         if not rs:
             return None
@@ -279,7 +272,7 @@ class DailyStats:
             "win_rate": round(self.win_rate, 3),
             "profit_factor": round(self.profit_factor, 2) if self.profit_factor != float("inf") else "inf",
             "avg_r": round(self.avg_r, 2) if self.avg_r is not None else None,
-            "expectancy_r": round(self.expectancy_r, 2) if self.expectancy_r is not None else None,
+            "avg_r": round(self.expectancy_r, 2) if self.expectancy_r is not None else None,
             "max_drawdown_r": None,  # TODO: compute in R terms
             "streak": f"{streak_count}{streak_type}",
             "round_trips": [rt.to_dict(sanitized=sanitized) for rt in self.round_trips],

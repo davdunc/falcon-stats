@@ -9,7 +9,7 @@ Usage:
 """
 
 import argparse
-import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +17,11 @@ from pathlib import Path
 from .parser import load_day
 from .roundtrips import identify_round_trips
 from .models import DailyStats
+
+TRADE_REVIEW_PATH = Path(os.getenv(
+    "TRADE_REVIEW_PATH",
+    "/mnt/c/Users/davdunc/OneDrive/Desktop/Trade_Review",
+))
 
 
 def cmd_ingest(args):
@@ -59,7 +64,7 @@ def cmd_summary(args):
     """Show summary statistics for a date."""
     # For now, re-ingest from the standard Trade_Review path
     date = args.date or datetime.now().strftime("%Y-%m-%d")
-    base = Path("/mnt/c/Users/davdunc/OneDrive/Desktop/Trade_Review")
+    base = TRADE_REVIEW_PATH
 
     # Try to find the date directory
     year_month = date[:7]
@@ -78,12 +83,18 @@ def cmd_summary(args):
         _print_summary(stats)
 
 
+def cmd_sanitized(args):
+    """List round-trips in sanitized R-multiples view."""
+    args.sanitized = True
+    cmd_trades(args)
+
+
 def cmd_trades(args):
     """List individual round-trips."""
     date = args.date or datetime.now().strftime("%Y-%m-%d")
     sanitized = getattr(args, "sanitized", False)
 
-    base = Path("/mnt/c/Users/davdunc/OneDrive/Desktop/Trade_Review")
+    base = TRADE_REVIEW_PATH
     year_month = date[:7]
     day_dir = base / year_month / date
     if not day_dir.exists():
@@ -110,7 +121,7 @@ def cmd_trades(args):
 
 def cmd_week(args):
     """Show weekly aggregate statistics."""
-    base = Path("/mnt/c/Users/davdunc/OneDrive/Desktop/Trade_Review")
+    base = TRADE_REVIEW_PATH
     # Find all date directories in the current month
     now = datetime.now()
     month_dir = base / now.strftime("%Y-%m")
@@ -216,8 +227,8 @@ Examples:
     commands = {
         "ingest": cmd_ingest,
         "summary": cmd_summary,
-        "trades": lambda a: cmd_trades(a),
-        "sanitized": lambda a: (setattr(a, "sanitized", True), cmd_trades(a)),
+        "trades": cmd_trades,
+        "sanitized": cmd_sanitized,
         "week": cmd_week,
     }
 
