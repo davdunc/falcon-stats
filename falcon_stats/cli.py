@@ -56,8 +56,20 @@ def cmd_ingest(args):
         stats = DailyStats(date=date_str, account=account, round_trips=account_rts)
         _print_summary(stats)
 
-    # TODO: persist to DynamoDB
-    print(f"\n  Note: DynamoDB persistence not yet implemented. Stats computed locally.")
+    # Write to DynamoDB (source of truth)
+    try:
+        from . import db
+        count = db.put_round_trips(round_trips, date_str)
+        print(f"\n  DynamoDB: {count} round-trips written")
+
+        for account in sorted(accounts):
+            account_rts = [rt for rt in round_trips if rt.account == account]
+            stats = DailyStats(date=date_str, account=account, round_trips=account_rts)
+            db.put_daily_stats(stats)
+        print(f"  DynamoDB: {len(accounts)} daily stats written")
+    except Exception as e:
+        print(f"\n  DynamoDB write failed: {e}", file=sys.stderr)
+        print(f"  Data is still available locally from CSV.", file=sys.stderr)
 
 
 def cmd_summary(args):
@@ -160,6 +172,60 @@ def cmd_week(args):
     _print_summary(stats)
 
 
+def cmd_backfill(args):
+    """Backfill all historical CSV data into DynamoDB."""
+    from . import db
+
+    base = TRADE_REVIEW_PATH
+    if not base.exists():
+        print(f"Trade review path not found: {base}", file=sys.stderr)
+        sys.exit(1)
+
+    total_rts = 0
+    total_stats = 0
+
+    for month_dir in sorted(base.iterdir()):
+        if not month_dir.is_dir() or not month_dir.name.startswith("20"):
+            continue
+        for day_dir in sorted(month_dir.iterdir()):
+            if not day_dir.is_dir() or not day_dir.name.startswith("20"):
+                continue
+            trades_file = day_dir / "Trades.csv"
+            if not trades_file.exists():
+                continue
+
+            try:
+                trades, orders = load_day(day_dir)
+                if not trades:
+                    continue
+                rts = identify_round_trips(trades, orders)
+                date_str = day_dir.name
+
+                count = db.put_round_trips(rts, date_str)
+                total_rts += count
+
+                accounts = set(rt.account for rt in rts)
+                for account in sorted(accounts):
+                    account_rts = [rt for rt in rts if rt.account == account]
+                    stats = DailyStats(date=date_str, account=account, round_trips=account_rts)
+                    db.put_daily_stats(stats)
+                    total_stats += 1
+
+                print(f"  {date_str}: {count} round-trips, {len(accounts)} stats")
+            except Exception as e:
+                print(f"  {day_dir.name}: ERROR — {e}", file=sys.stderr)
+
+    print(f"\nBackfill complete: {total_rts} round-trips, {total_stats} daily stats written to DynamoDB")
+
+
+def cmd_rebuild_notion(args):
+    """Rebuild Notion databases from DynamoDB source of truth."""
+    print("Rebuild Notion from DynamoDB — not yet implemented.")
+    print("This will read all data from falcon-trades DynamoDB table")
+    print("and recreate Notion pages in the Live/Paper/Daily Stats databases.")
+    print("\nTo implement: add Notion API integration to falcon_stats/notion.py")
+
+
 def _print_summary(stats: DailyStats):
     """Print formatted daily statistics."""
     streak_count, streak_type = stats.streak
@@ -218,6 +284,11 @@ Examples:
 
     week_p = sub.add_parser("week", help="Show weekly aggregate")
 
+    backfill_p = sub.add_parser("backfill", help="Backfill all historical CSV data into DynamoDB")
+
+    rebuild_p = sub.add_parser("rebuild-notion", help="Rebuild Notion databases from DynamoDB")
+    rebuild_p.add_argument("--date", "-d", help="Rebuild specific date (default: all)")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -230,6 +301,8 @@ Examples:
         "trades": cmd_trades,
         "sanitized": cmd_sanitized,
         "week": cmd_week,
+        "backfill": cmd_backfill,
+        "rebuild-notion": cmd_rebuild_notion,
     }
 
     commands[args.command](args)
