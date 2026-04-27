@@ -226,6 +226,68 @@ def cmd_rebuild_notion(args):
     print("\nTo implement: add Notion API integration to falcon_stats/notion.py")
 
 
+def cmd_ingest_broker(args):
+    """Ingest Cobra broker Excel export into DynamoDB."""
+    from . import db
+    from .broker_parser import parse_broker_excel
+    from collections import defaultdict
+
+    path = Path(args.path)
+    if not path.exists():
+        print(f"Error: File not found: {path}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Parsing broker export: {path.name}...")
+    trades = parse_broker_excel(path)
+    print(f"  Parsed {len(trades)} trades")
+
+    # Group by date for round-trip identification
+    by_date = defaultdict(list)
+    for t in trades:
+        by_date[t.time.strftime("%Y-%m-%d")].append(t)
+
+    total_rts = 0
+    total_stats = 0
+
+    for date_str in sorted(by_date.keys()):
+        day_trades = by_date[date_str]
+        rts = identify_round_trips(day_trades)
+
+        if not rts:
+            continue
+
+        count = db.put_round_trips(rts, date_str)
+        total_rts += count
+
+        accounts = set(rt.account for rt in rts)
+        for account in sorted(accounts):
+            account_rts = [rt for rt in rts if rt.account == account]
+            stats = DailyStats(date=date_str, account=account, round_trips=account_rts)
+            db.put_daily_stats(stats)
+            total_stats += 1
+
+        closed = sum(1 for rt in rts if rt.is_closed)
+        pnl = sum(rt.pnl for rt in rts)
+        print(f"  {date_str}: {len(day_trades)} executions → {count} round-trips ({closed} closed, P&L ${pnl:+.2f})")
+
+    print(f"\nBroker ingest complete: {total_rts} round-trips, {total_stats} daily stats → DynamoDB")
+
+
+def cmd_calc(args):
+    """Calculate trade cost estimate."""
+    from .calculator import estimate_trade
+
+    est = estimate_trade(
+        symbol=args.symbol.upper(),
+        side=args.side,
+        shares=args.shares,
+        entry=args.entry,
+        target=args.target,
+        stop=args.stop,
+    )
+    print(est.summary())
+
+
 def _print_summary(stats: DailyStats):
     """Print formatted daily statistics."""
     streak_count, streak_type = stats.streak
@@ -289,6 +351,17 @@ Examples:
     rebuild_p = sub.add_parser("rebuild-notion", help="Rebuild Notion databases from DynamoDB")
     rebuild_p.add_argument("--date", "-d", help="Rebuild specific date (default: all)")
 
+    broker_p = sub.add_parser("ingest-broker", help="Ingest Cobra broker Excel export into DynamoDB")
+    broker_p.add_argument("path", help="Path to broker .xls/.xlsx file")
+
+    calc_p = sub.add_parser("calc", help="Calculate trade cost estimate")
+    calc_p.add_argument("symbol", help="Ticker symbol")
+    calc_p.add_argument("side", choices=["long", "short"], help="Trade direction")
+    calc_p.add_argument("shares", type=int, help="Number of shares")
+    calc_p.add_argument("entry", type=float, help="Entry price")
+    calc_p.add_argument("target", type=float, help="Target price")
+    calc_p.add_argument("stop", type=float, help="Stop loss price")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -303,6 +376,8 @@ Examples:
         "week": cmd_week,
         "backfill": cmd_backfill,
         "rebuild-notion": cmd_rebuild_notion,
+        "ingest-broker": cmd_ingest_broker,
+        "calc": cmd_calc,
     }
 
     commands[args.command](args)

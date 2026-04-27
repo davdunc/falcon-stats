@@ -48,13 +48,13 @@ def _to_decimal(val):
 # WRITE — Round-Trips
 # ============================================================
 
-def put_round_trip(rt: RoundTrip, date_str: str) -> dict:
+def put_round_trip(rt: RoundTrip, date_str: str, idx: int = 0) -> dict:
     """Write a single round-trip to DynamoDB."""
     entry_time = rt.entry_time.strftime("%H%M%S")
 
     item = {
         "PK": f"TRADE#{date_str}",
-        "SK": f"{rt.account}#{rt.symbol}#{entry_time}",
+        "SK": f"{rt.account}#{rt.symbol}#{entry_time}#{idx:03d}",
         "account": rt.account,
         "trade_date": date_str,
         "symbol": rt.symbol,
@@ -84,12 +84,12 @@ def put_round_trips(round_trips: list[RoundTrip], date_str: str) -> int:
     """Write multiple round-trips to DynamoDB. Returns count written."""
     table = _get_table()
     count = 0
-    with table.batch_writer() as batch:
-        for rt in round_trips:
+    with table.batch_writer(overwrite_by_pkeys=["PK", "SK"]) as batch:
+        for idx, rt in enumerate(round_trips):
             entry_time = rt.entry_time.strftime("%H%M%S")
             item = {
                 "PK": f"TRADE#{date_str}",
-                "SK": f"{rt.account}#{rt.symbol}#{entry_time}",
+                "SK": f"{rt.account}#{rt.symbol}#{entry_time}#{idx:03d}",
                 "account": rt.account,
                 "trade_date": date_str,
                 "symbol": rt.symbol,
