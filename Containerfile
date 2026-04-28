@@ -1,13 +1,14 @@
-FROM python:3.13-slim
+FROM registry.fedoraproject.org/fedora:44
 
 LABEL maintainer="David Duncan <davdunc>"
 LABEL description="falcon-stats: Trading statistics engine with DynamoDB persistence"
 
 WORKDIR /app
 
-# Install dependencies
+# Install Python and dependencies on Fedora
+RUN dnf install -y python3 python3-pip && dnf clean all
 COPY pyproject.toml .
-RUN pip install --no-cache-dir boto3 python-dotenv openpyxl
+RUN python3 -m pip install --no-cache-dir boto3 python-dotenv openpyxl
 
 # Copy application
 COPY falcon_stats/ falcon_stats/
