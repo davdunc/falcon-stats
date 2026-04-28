@@ -1,0 +1,29 @@
+# falcon-stats.container — Podman Quadlet specification
+# Place in ~/.config/containers/systemd/ for auto-start
+# Or run manually: podman run --rm -v ... falcon-stats <command>
+
+[Unit]
+Description=Falcon Stats Trading Engine
+After=network-online.target
+
+[Container]
+Image=localhost/falcon-stats:latest
+ContainerName=falcon-stats
+Network=host
+
+# Mount DAS Trader exports (adjust path for your system)
+Volume=%h/OneDrive/Desktop/Trade_Review:/data/Trade_Review:ro
+
+# AWS credentials via IAM roles preferred
+# If using static credentials:
+# Volume=%h/.aws:/root/.aws:ro
+
+# Environment
+Environment=FALCON_TRADES_TABLE=falcon-trades
+Environment=AWS_DEFAULT_REGION=us-east-2
+
+# Run as one-shot (not a daemon)
+Exec=--help
+
+[Install]
+WantedBy=default.target
