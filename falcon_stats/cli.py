@@ -288,6 +288,19 @@ def cmd_calc(args):
     print(est.summary())
 
 
+def cmd_size(args):
+    """Pre-trade position sizer — ATR-based stop width and share calculation."""
+    from .sizer import size_trade
+
+    result = size_trade(
+        symbol=args.symbol.upper(),
+        side=args.side,
+        entry=args.entry,
+        max_risk=args.risk,
+    )
+    print(result.summary())
+
+
 def _print_summary(stats: DailyStats):
     """Print formatted daily statistics."""
     streak_count, streak_type = stats.streak
@@ -362,6 +375,12 @@ Examples:
     calc_p.add_argument("target", type=float, help="Target price")
     calc_p.add_argument("stop", type=float, help="Stop loss price")
 
+    size_p = sub.add_parser("size", help="Pre-trade sizer — ATR-based stops and share count")
+    size_p.add_argument("symbol", help="Ticker symbol")
+    size_p.add_argument("side", choices=["long", "short"], help="Trade direction")
+    size_p.add_argument("entry", type=float, help="Planned entry price")
+    size_p.add_argument("--risk", type=float, default=280.0, help="Max risk in dollars (default: $280)")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -378,6 +397,7 @@ Examples:
         "rebuild-notion": cmd_rebuild_notion,
         "ingest-broker": cmd_ingest_broker,
         "calc": cmd_calc,
+        "size": cmd_size,
     }
 
     commands[args.command](args)
