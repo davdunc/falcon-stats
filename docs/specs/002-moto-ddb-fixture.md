@@ -128,7 +128,7 @@ Each box is one Ralph iteration target.
 - [x] `tests/conftest.py` exists (currently no conftest in tests/)
 - [x] `dynamodb_table` fixture in `conftest.py` creates the table with the exact schema above using `moto.mock_aws` context manager
 - [x] Fixture resets `falcon_stats.db._table` to `None` via `monkeypatch.setattr` so cached client doesn't leak across tests
-- [ ] Fixture uses table name `os.getenv("FALCON_TRADES_TABLE", "falcon-trades")` (matches `db.py:24`)
+- [x] Fixture uses table name `os.getenv("FALCON_TRADES_TABLE", "falcon-trades")` (matches `db.py:24`)
 - [ ] `populated_table` fixture loads the 5 round-trips and 2 daily-stats records exactly as specified
 - [ ] Item shapes match `db.put_round_trip()` output (`Decimal` types, no `None` values stripped)
 - [ ] One smoke test in `tests/test_db_fixture.py` asserting:
