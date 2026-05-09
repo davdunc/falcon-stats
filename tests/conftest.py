@@ -8,10 +8,16 @@ import boto3
 import pytest
 from moto import mock_aws
 
+from falcon_stats import db
+
 
 @pytest.fixture
-def dynamodb_table():
+def dynamodb_table(monkeypatch):
     """Creates an empty falcon-trades table in moto's mock DDB.
+
+    Resets the falcon_stats.db module-level _table cache so callers
+    of db._get_table() pick up the mock automatically and a cached
+    real-AWS client doesn't leak across tests.
 
     Yields the boto3 Table resource. The mock_aws context manager
     cleans up the table on fixture teardown.
@@ -42,4 +48,5 @@ def dynamodb_table():
             ],
             BillingMode="PAY_PER_REQUEST",
         )
+        monkeypatch.setattr(db, "_table", None)
         yield table
