@@ -5,12 +5,107 @@ fixtures planned here.
 """
 
 import os
+from decimal import Decimal
 
 import boto3
 import pytest
 from moto import mock_aws
 
 from falcon_stats import db
+
+
+SAMPLE_ROUND_TRIPS: list[dict] = [
+    {
+        "PK": "TRADE#2026-05-04",
+        "SK": "<SIM_ACCOUNT>#NVDA#093000#001",
+        "account": "<SIM_ACCOUNT>",
+        "trade_date": "2026-05-04",
+        "symbol": "NVDA",
+        "side": "LONG",
+        "shares": 50,
+        "avg_entry": Decimal("197.90"),
+        "avg_exit": Decimal("198.00"),
+        "pnl": Decimal("5.00"),
+        "is_winner": True,
+        "is_closed": True,
+    },
+    {
+        "PK": "TRADE#2026-05-04",
+        "SK": "<SIM_ACCOUNT>#GOOGL#100500#002",
+        "account": "<SIM_ACCOUNT>",
+        "trade_date": "2026-05-04",
+        "symbol": "GOOGL",
+        "side": "SHORT",
+        "shares": 5,
+        "avg_entry": Decimal("384.00"),
+        "avg_exit": Decimal("384.50"),
+        "pnl": Decimal("-2.50"),
+        "is_winner": False,
+        "is_closed": True,
+    },
+    {
+        "PK": "TRADE#2026-05-05",
+        "SK": "<LIVE_ACCOUNT>#CYTK#093000#001",
+        "account": "<LIVE_ACCOUNT>",
+        "trade_date": "2026-05-05",
+        "symbol": "CYTK",
+        "side": "LONG",
+        "shares": 5,
+        "avg_entry": Decimal("87.00"),
+        "avg_exit": Decimal("92.00"),
+        "pnl": Decimal("25.00"),
+        "is_winner": True,
+        "is_closed": True,
+    },
+    {
+        "PK": "TRADE#2026-05-05",
+        "SK": "<SIM_ACCOUNT>#DOCN#101500#002",
+        "account": "<SIM_ACCOUNT>",
+        "trade_date": "2026-05-05",
+        "symbol": "DOCN",
+        "side": "SHORT",
+        "shares": 5,
+        "avg_entry": Decimal("127.42"),
+        "avg_exit": Decimal("126.00"),
+        "pnl": Decimal("7.10"),
+        "is_winner": True,
+        "is_closed": True,
+    },
+    {
+        "PK": "TRADE#2026-05-05",
+        "SK": "<SIM_ACCOUNT>#SHOP#103000#003",
+        "account": "<SIM_ACCOUNT>",
+        "trade_date": "2026-05-05",
+        "symbol": "SHOP",
+        "side": "LONG",
+        "shares": 260,
+        "avg_entry": Decimal("110.79"),
+        "is_winner": False,
+        "is_closed": False,
+    },
+]
+
+
+SAMPLE_DAILY_STATS: list[dict] = [
+    {
+        "PK": "STATS#2026-05-04",
+        "SK": "<SIM_ACCOUNT>",
+        "account": "<SIM_ACCOUNT>",
+        "trade_date": "2026-05-04",
+        "total_trades": 2,
+        "win_rate": Decimal("0.50"),
+        "total_pnl": Decimal("2.50"),
+    },
+    {
+        "PK": "STATS#2026-05-05",
+        "SK": "<LIVE_ACCOUNT>",
+        "account": "<LIVE_ACCOUNT>",
+        "trade_date": "2026-05-05",
+        "total_trades": 1,
+        "win_rate": Decimal("1.00"),
+        "total_pnl": Decimal("25.00"),
+    },
+]
 
 
 @pytest.fixture
@@ -52,3 +147,18 @@ def dynamodb_table(monkeypatch):
         )
         monkeypatch.setattr(db, "_table", None)
         yield table
+
+
+@pytest.fixture
+def populated_table(dynamodb_table):
+    """Empty table seeded with 5 round-trips and 2 daily-stats records.
+
+    Built on dynamodb_table; tests needing canonical sample data use
+    this fixture. Tests setting up their own data use the empty one.
+    """
+    with dynamodb_table.batch_writer() as batch:
+        for rt in SAMPLE_ROUND_TRIPS:
+            batch.put_item(Item=rt)
+        for stat in SAMPLE_DAILY_STATS:
+            batch.put_item(Item=stat)
+    yield dynamodb_table
