@@ -24,10 +24,15 @@ class Trade:
     time: datetime
     route: str = ""
     is_short: bool = False
+    parent_trade_id: int | None = None
 
     @property
     def notional(self) -> float:
         return self.quantity * self.price
+
+    @property
+    def is_synthetic(self) -> bool:
+        return self.parent_trade_id is not None
 
 
 @dataclass

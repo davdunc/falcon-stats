@@ -231,3 +231,56 @@ def get_stats_range(start_date: str, end_date: str, account: str | None = None) 
         all_items.extend(items)
         current += timedelta(days=1)
     return sorted(all_items, key=lambda x: x.get("trade_date", ""))
+
+
+# ============================================================
+# DELETE — Round-Trips & Daily Stats
+# ============================================================
+
+def delete_round_trips(date_str: str, account: str | None = None) -> int:
+    """Delete all round-trips for a given date (optionally one account).
+
+    Used before re-ingesting to prevent stale records when the round-trip
+    count or list order changes between ingests. The SK includes a list-
+    position idx, so an old RT at idx=15 may have no counterpart in a new
+    ingest with a different RT count, leaving orphaned entries.
+
+    Returns the count of items deleted.
+    """
+    table = _get_table()
+    response = table.query(
+        KeyConditionExpression="PK = :pk",
+        ExpressionAttributeValues={":pk": f"TRADE#{date_str}"},
+    )
+    items = response.get("Items", [])
+    if account:
+        items = [i for i in items if i.get("account") == account]
+
+    count = 0
+    with table.batch_writer() as batch:
+        for item in items:
+            batch.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
+            count += 1
+    return count
+
+
+def delete_daily_stats(date_str: str, account: str | None = None) -> int:
+    """Delete daily stats for a given date (optionally one account).
+
+    Returns the count of items deleted.
+    """
+    table = _get_table()
+    response = table.query(
+        KeyConditionExpression="PK = :pk",
+        ExpressionAttributeValues={":pk": f"STATS#{date_str}"},
+    )
+    items = response.get("Items", [])
+    if account:
+        items = [i for i in items if i.get("account") == account]
+
+    count = 0
+    with table.batch_writer() as batch:
+        for item in items:
+            batch.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
+            count += 1
+    return count

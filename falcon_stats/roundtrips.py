@@ -7,9 +7,29 @@ The round-trip is the atomic unit of trading analysis. All statistics
 are computed from round-trips, not individual trades.
 """
 
+from dataclasses import replace
 from collections import defaultdict
 
 from .models import Trade, Order, RoundTrip, Side
+
+
+def _split_flip_trade(trade: Trade, closing_qty: int, opening_qty: int) -> tuple[Trade, Trade]:
+    """Split a flip-through-zero trade into two synthetic Trades.
+
+    A "flip" is a single fill whose quantity exceeds the magnitude of the
+    current open position, causing the position to cross through zero
+    (e.g., long +5 + sell 15 -> short -10). The real-world execution is one
+    broker fill, but for round-trip accounting it must be treated as two
+    actions: closing the existing position and opening a new one in the
+    opposite direction.
+
+    Returns (closing_synthetic, opening_synthetic). Both inherit the original
+    trade's price/time/account/side and are tagged with parent_trade_id so
+    the audit trail back to the original fill is preserved.
+    """
+    closing = replace(trade, quantity=closing_qty, parent_trade_id=trade.trade_id)
+    opening = replace(trade, quantity=opening_qty, parent_trade_id=trade.trade_id)
+    return closing, opening
 
 
 def identify_round_trips(
@@ -67,6 +87,37 @@ def _process_symbol_trades(
             delta = -trade.quantity
 
         new_position = position + delta
+
+        # Detect flip-through-zero: position crosses sign in a single fill.
+        # The trade must be split into a closing portion (sized to flatten the
+        # current position) and an opening portion (the remainder, which starts
+        # a new round-trip in the opposite direction).
+        is_flip = (position > 0 and new_position < 0) or (position < 0 and new_position > 0)
+
+        if is_flip:
+            closing_qty = abs(position)
+            opening_qty = trade.quantity - closing_qty
+            closing_part, opening_part = _split_flip_trade(trade, closing_qty, opening_qty)
+
+            # 1. Closing portion exits the current round-trip.
+            current_exits.append(closing_part)
+            side = Side.BUY if current_entries[0].side == Side.BUY else Side.SELL
+            planned_stop = _find_stop(account, symbol, current_entries, stop_lookup)
+            round_trips.append(RoundTrip(
+                symbol=symbol,
+                account=account,
+                side=side,
+                entries=list(current_entries),
+                exits=list(current_exits),
+                planned_stop=planned_stop,
+            ))
+            current_entries.clear()
+            current_exits.clear()
+
+            # 2. Opening portion starts a new round-trip in the opposite direction.
+            current_entries.append(opening_part)
+            position = new_position
+            continue
 
         # Determine if this trade is an entry or exit
         if position == 0:
