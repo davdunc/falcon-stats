@@ -124,7 +124,7 @@ output in `db.py:55-149` — `Decimal` for floats, no `None` values, etc.
 
 Each box is one Ralph iteration target.
 
-- [ ] `moto[dynamodb] >= 5.0` added to `[project.optional-dependencies] dev` in `pyproject.toml`
+- [x] `moto[dynamodb] >= 5.0` added to `[project.optional-dependencies] dev` in `pyproject.toml`
 - [ ] `tests/conftest.py` exists (currently no conftest in tests/)
 - [ ] `dynamodb_table` fixture in `conftest.py` creates the table with the exact schema above using `moto.mock_aws` context manager
 - [ ] Fixture resets `falcon_stats.db._table` to `None` via `monkeypatch.setattr` so cached client doesn't leak across tests
