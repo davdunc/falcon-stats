@@ -56,9 +56,18 @@ def cmd_ingest(args):
         stats = DailyStats(date=date_str, account=account, round_trips=account_rts)
         _print_summary(stats)
 
-    # Write to DynamoDB (source of truth)
+    # Write to DynamoDB (source of truth). Re-ingest is idempotent: stale
+    # records from a prior ingest are deleted first, scoped to the accounts
+    # appearing in this run so other accounts' data for the same date stays
+    # untouched.
     try:
         from . import db
+        for account in sorted(accounts):
+            deleted_rts = db.delete_round_trips(date_str, account=account)
+            deleted_stats = db.delete_daily_stats(date_str, account=account)
+            if deleted_rts or deleted_stats:
+                print(f"  DynamoDB: cleaned {deleted_rts} stale RTs, {deleted_stats} stale stats for {account}")
+
         count = db.put_round_trips(round_trips, date_str)
         print(f"\n  DynamoDB: {count} round-trips written")
 
