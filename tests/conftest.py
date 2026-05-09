@@ -4,6 +4,8 @@ See docs/specs/002-moto-ddb-fixture.md for the moto-mocked DynamoDB
 fixtures planned here.
 """
 
+import os
+
 import boto3
 import pytest
 from moto import mock_aws
@@ -25,7 +27,7 @@ def dynamodb_table(monkeypatch):
     with mock_aws():
         ddb = boto3.resource("dynamodb", region_name="us-east-2")
         table = ddb.create_table(
-            TableName="falcon-trades",
+            TableName=os.getenv("FALCON_TRADES_TABLE", "falcon-trades"),
             KeySchema=[
                 {"AttributeName": "PK", "KeyType": "HASH"},
                 {"AttributeName": "SK", "KeyType": "RANGE"},
