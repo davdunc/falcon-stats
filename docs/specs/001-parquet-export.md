@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Owner:** davdunc
-**Issue:** TBD (link after `gh issue create`)
+**Issue:** [#14](https://github.com/davdunc/falcon-stats/issues/14)
 **Spec template version:** 1
 
 ## Status Checklist
