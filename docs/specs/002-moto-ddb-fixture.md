@@ -101,21 +101,21 @@ closed/open. Modeled on real session data so tests are recognizable.
 
 | # | Date | Account | Account Type | Symbol | Side | Shares | Avg Entry | Avg Exit | P&L | Closed |
 |---|------|---------|--------------|--------|------|-------:|----------:|---------:|-----:|:------:|
-| 1 | 2026-05-04 | <SIM_ACCOUNT> | SIM | NVDA | LONG | 50 | 197.90 | 198.00 | +$5.00 | ✅ |
-| 2 | 2026-05-04 | <SIM_ACCOUNT> | SIM | GOOGL | SHORT | 5 | 384.00 | 384.50 | -$2.50 | ✅ |
-| 3 | 2026-05-05 | <LIVE_ACCOUNT> | LIVE | CYTK | LONG | 5 | 87.00 | 92.00 | +$25.00 | ✅ |
-| 4 | 2026-05-05 | <SIM_ACCOUNT> | SIM | DOCN | SHORT | 5 | 127.42 | 126.00 | +$7.10 | ✅ |
-| 5 | 2026-05-05 | <SIM_ACCOUNT> | SIM | SHOP | LONG | 260 | 110.79 | — | $0.00 | ❌ (open) |
+| 1 | 2026-05-04 | ACCT_SIM | SIM | NVDA | LONG | 50 | 197.90 | 198.00 | +$5.00 | ✅ |
+| 2 | 2026-05-04 | ACCT_SIM | SIM | GOOGL | SHORT | 5 | 384.00 | 384.50 | -$2.50 | ✅ |
+| 3 | 2026-05-05 | ACCT_LIVE | LIVE | CYTK | LONG | 5 | 87.00 | 92.00 | +$25.00 | ✅ |
+| 4 | 2026-05-05 | ACCT_SIM | SIM | DOCN | SHORT | 5 | 127.42 | 126.00 | +$7.10 | ✅ |
+| 5 | 2026-05-05 | ACCT_SIM | SIM | SHOP | LONG | 260 | 110.79 | — | $0.00 | ❌ (open) |
 
 2 daily-stats records, one per `(date, account)` actually represented by
-closed RTs (skip <SIM_ACCOUNT> 2026-05-05 stats if SHOP being open changes the
+closed RTs (skip ACCT_SIM 2026-05-05 stats if SHOP being open changes the
 aggregation — a test of how stats handle open positions, leave that for
 a separate test):
 
 | # | Date | Account | Total Trades | Win Rate | Total P&L |
 |---|------|---------|-------------:|---------:|----------:|
-| 1 | 2026-05-04 | <SIM_ACCOUNT> | 2 | 0.50 | +$2.50 |
-| 2 | 2026-05-05 | <LIVE_ACCOUNT> | 1 | 1.00 | +$25.00 |
+| 1 | 2026-05-04 | ACCT_SIM | 2 | 0.50 | +$2.50 |
+| 2 | 2026-05-05 | ACCT_LIVE | 1 | 1.00 | +$25.00 |
 
 Item shapes follow the exact `db.put_round_trip()` / `db.put_daily_stats()`
 output in `db.py:55-149` — `Decimal` for floats, no `None` values, etc.

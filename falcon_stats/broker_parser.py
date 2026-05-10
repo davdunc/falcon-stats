@@ -7,6 +7,7 @@ Different from DAS CSV parser:
 - .xls extension but actually .xlsx format (broker quirk)
 """
 
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -47,7 +48,7 @@ def parse_broker_excel(path: Path) -> list[Trade]:
         trades.append(Trade(
             trade_id=trade_id,
             order_id=trade_id,  # Broker data doesn't have order IDs
-            account="<LIVE_ACCOUNT>",  # Cobra live account
+            account=os.getenv("FALCON_LIVE_ACCOUNT", "ACCT_LIVE"),
             symbol=symbol.strip(),
             side=side,
             quantity=shares,
