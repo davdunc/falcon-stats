@@ -131,7 +131,7 @@ Each box is one Ralph iteration target.
 - [x] Fixture uses table name `os.getenv("FALCON_TRADES_TABLE", "falcon-trades")` (matches `db.py:24`)
 - [x] `populated_table` fixture loads the 5 round-trips and 2 daily-stats records exactly as specified
 - [x] Item shapes match `db.put_round_trip()` output (`Decimal` types, no `None` values stripped)
-- [ ] One smoke test in `tests/test_db_fixture.py` asserting:
+- [x] One smoke test in `tests/test_db_fixture.py` asserting:
   - `dynamodb_table` returns an empty table (`scan` returns 0 items)
   - `populated_table` returns 7 items total (5 RTs + 2 stats)
   - `db.get_round_trips("2026-05-04")` returns 2 items when called against the populated fixture
