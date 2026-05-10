@@ -57,7 +57,7 @@ Defaults:
 | Column | pyarrow type | Source | Notes |
 |--------|--------------|--------|-------|
 | `trade_date` | `date32` | DDB `trade_date` | YYYY-MM-DD |
-| `account` | `string` | DDB `account` | e.g. `<LIVE_ACCOUNT>`, `<SIM_ACCOUNT>` |
+| `account` | `string` | DDB `account` | e.g. `ACCT_LIVE`, `ACCT_SIM` |
 | `symbol` | `string` | DDB `symbol` | uppercase |
 | `side` | `string` | DDB `side` | `LONG` / `SHORT` |
 | `total_shares` | `int32` | DDB `shares` | sum of entries |

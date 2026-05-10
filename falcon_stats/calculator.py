@@ -3,7 +3,7 @@
 Uses actual fee data from your Cobra broker history to model real costs.
 Answers: "If I take this trade, what's my real R after fees?"
 
-Fee model (from 847 trades on Cobra/<LIVE_ACCOUNT>):
+Fee model (from 847 trades on a Cobra live account):
 - Commission: ~$0.0015/share (route-dependent, rebates offset)
 - ECN Maker rebate: ~$0.0006/share (you GET paid for adding liquidity)
 - SEC Fee: ~$0.0000278 × notional (sells only)

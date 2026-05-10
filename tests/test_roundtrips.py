@@ -8,7 +8,7 @@ from falcon_stats.models import Trade, Side
 from falcon_stats.roundtrips import identify_round_trips
 
 
-def _t(idx: int, side: str, qty: int, price: float, symbol: str = "TEST", account: str = "<SIM_ACCOUNT>") -> Trade:
+def _t(idx: int, side: str, qty: int, price: float, symbol: str = "TEST", account: str = "ACCT_SIM") -> Trade:
     """Build a Trade for tests. idx orders trades chronologically."""
     return Trade(
         trade_id=idx,
