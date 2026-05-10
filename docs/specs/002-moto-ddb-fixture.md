@@ -124,20 +124,20 @@ output in `db.py:55-149` — `Decimal` for floats, no `None` values, etc.
 
 Each box is one Ralph iteration target.
 
-- [ ] `moto[dynamodb] >= 5.0` added to `[project.optional-dependencies] dev` in `pyproject.toml`
-- [ ] `tests/conftest.py` exists (currently no conftest in tests/)
-- [ ] `dynamodb_table` fixture in `conftest.py` creates the table with the exact schema above using `moto.mock_aws` context manager
-- [ ] Fixture resets `falcon_stats.db._table` to `None` via `monkeypatch.setattr` so cached client doesn't leak across tests
-- [ ] Fixture uses table name `os.getenv("FALCON_TRADES_TABLE", "falcon-trades")` (matches `db.py:24`)
-- [ ] `populated_table` fixture loads the 5 round-trips and 2 daily-stats records exactly as specified
-- [ ] Item shapes match `db.put_round_trip()` output (`Decimal` types, no `None` values stripped)
-- [ ] One smoke test in `tests/test_db_fixture.py` asserting:
+- [x] `moto[dynamodb] >= 5.0` added to `[project.optional-dependencies] dev` in `pyproject.toml`
+- [x] `tests/conftest.py` exists (currently no conftest in tests/)
+- [x] `dynamodb_table` fixture in `conftest.py` creates the table with the exact schema above using `moto.mock_aws` context manager
+- [x] Fixture resets `falcon_stats.db._table` to `None` via `monkeypatch.setattr` so cached client doesn't leak across tests
+- [x] Fixture uses table name `os.getenv("FALCON_TRADES_TABLE", "falcon-trades")` (matches `db.py:24`)
+- [x] `populated_table` fixture loads the 5 round-trips and 2 daily-stats records exactly as specified
+- [x] Item shapes match `db.put_round_trip()` output (`Decimal` types, no `None` values stripped)
+- [x] One smoke test in `tests/test_db_fixture.py` asserting:
   - `dynamodb_table` returns an empty table (`scan` returns 0 items)
   - `populated_table` returns 7 items total (5 RTs + 2 stats)
   - `db.get_round_trips("2026-05-04")` returns 2 items when called against the populated fixture
-- [ ] Existing test suite still passes: `pytest tests/test_roundtrips.py -q`
-- [ ] New tests pass: `pytest tests/test_db_fixture.py -q`
-- [ ] Pytest gate green: `pytest tests/ -q` exits 0
+- [x] Existing test suite still passes: `pytest tests/test_roundtrips.py -q`
+- [x] New tests pass: `pytest tests/test_db_fixture.py -q`
+- [x] Pytest gate green: `pytest tests/ -q` exits 0
 
 ## Open Questions
 
