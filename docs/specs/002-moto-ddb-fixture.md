@@ -135,7 +135,7 @@ Each box is one Ralph iteration target.
   - `dynamodb_table` returns an empty table (`scan` returns 0 items)
   - `populated_table` returns 7 items total (5 RTs + 2 stats)
   - `db.get_round_trips("2026-05-04")` returns 2 items when called against the populated fixture
-- [ ] Existing test suite still passes: `pytest tests/test_roundtrips.py -q`
+- [x] Existing test suite still passes: `pytest tests/test_roundtrips.py -q`
 - [ ] New tests pass: `pytest tests/test_db_fixture.py -q`
 - [ ] Pytest gate green: `pytest tests/ -q` exits 0
 
