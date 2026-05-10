@@ -17,8 +17,8 @@ from falcon_stats import db
 SAMPLE_ROUND_TRIPS: list[dict] = [
     {
         "PK": "TRADE#2026-05-04",
-        "SK": "<SIM_ACCOUNT>#NVDA#093000#001",
-        "account": "<SIM_ACCOUNT>",
+        "SK": "ACCT_SIM#NVDA#093000#001",
+        "account": "ACCT_SIM",
         "trade_date": "2026-05-04",
         "symbol": "NVDA",
         "side": "LONG",
@@ -37,8 +37,8 @@ SAMPLE_ROUND_TRIPS: list[dict] = [
     },
     {
         "PK": "TRADE#2026-05-04",
-        "SK": "<SIM_ACCOUNT>#GOOGL#100500#002",
-        "account": "<SIM_ACCOUNT>",
+        "SK": "ACCT_SIM#GOOGL#100500#002",
+        "account": "ACCT_SIM",
         "trade_date": "2026-05-04",
         "symbol": "GOOGL",
         "side": "SHORT",
@@ -57,8 +57,8 @@ SAMPLE_ROUND_TRIPS: list[dict] = [
     },
     {
         "PK": "TRADE#2026-05-05",
-        "SK": "<LIVE_ACCOUNT>#CYTK#093000#001",
-        "account": "<LIVE_ACCOUNT>",
+        "SK": "ACCT_LIVE#CYTK#093000#001",
+        "account": "ACCT_LIVE",
         "trade_date": "2026-05-05",
         "symbol": "CYTK",
         "side": "LONG",
@@ -77,8 +77,8 @@ SAMPLE_ROUND_TRIPS: list[dict] = [
     },
     {
         "PK": "TRADE#2026-05-05",
-        "SK": "<SIM_ACCOUNT>#DOCN#101500#002",
-        "account": "<SIM_ACCOUNT>",
+        "SK": "ACCT_SIM#DOCN#101500#002",
+        "account": "ACCT_SIM",
         "trade_date": "2026-05-05",
         "symbol": "DOCN",
         "side": "SHORT",
@@ -97,8 +97,8 @@ SAMPLE_ROUND_TRIPS: list[dict] = [
     },
     {
         "PK": "TRADE#2026-05-05",
-        "SK": "<SIM_ACCOUNT>#SHOP#103000#003",
-        "account": "<SIM_ACCOUNT>",
+        "SK": "ACCT_SIM#SHOP#103000#003",
+        "account": "ACCT_SIM",
         "trade_date": "2026-05-05",
         "symbol": "SHOP",
         "side": "LONG",
@@ -118,8 +118,8 @@ SAMPLE_ROUND_TRIPS: list[dict] = [
 SAMPLE_DAILY_STATS: list[dict] = [
     {
         "PK": "STATS#2026-05-04",
-        "SK": "<SIM_ACCOUNT>",
-        "account": "<SIM_ACCOUNT>",
+        "SK": "ACCT_SIM",
+        "account": "ACCT_SIM",
         "trade_date": "2026-05-04",
         "total_trades": 2,
         "win_rate": Decimal("0.50"),
@@ -138,8 +138,8 @@ SAMPLE_DAILY_STATS: list[dict] = [
     },
     {
         "PK": "STATS#2026-05-05",
-        "SK": "<LIVE_ACCOUNT>",
-        "account": "<LIVE_ACCOUNT>",
+        "SK": "ACCT_LIVE",
+        "account": "ACCT_LIVE",
         "trade_date": "2026-05-05",
         "total_trades": 1,
         "win_rate": Decimal("1.00"),
