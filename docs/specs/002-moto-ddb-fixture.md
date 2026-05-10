@@ -137,7 +137,7 @@ Each box is one Ralph iteration target.
   - `db.get_round_trips("2026-05-04")` returns 2 items when called against the populated fixture
 - [x] Existing test suite still passes: `pytest tests/test_roundtrips.py -q`
 - [x] New tests pass: `pytest tests/test_db_fixture.py -q`
-- [ ] Pytest gate green: `pytest tests/ -q` exits 0
+- [x] Pytest gate green: `pytest tests/ -q` exits 0
 
 ## Open Questions
 
