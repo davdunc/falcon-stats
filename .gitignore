@@ -23,3 +23,9 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# SQLite + broker data
+*.db
+*.xls
+*.xlsx
+tests/fixtures/broker-fixture-2026-06-01.*

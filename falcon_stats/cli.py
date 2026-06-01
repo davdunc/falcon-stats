@@ -273,6 +273,69 @@ def cmd_ingest_broker(args):
     print(f"\nBroker ingest complete: {total_rts} round-trips, {total_stats} daily stats → DynamoDB")
 
 
+def cmd_refresh_from_xls(args):
+    """Ingest broker XLS files into SQLite and rebuild affected round-trips."""
+    from .ingest_xls import refresh_from_paths
+
+    account = args.account or os.getenv("FALCON_ACCOUNT") or "ACCT"
+    stats = refresh_from_paths(
+        paths=list(args.paths),
+        account=account,
+        db_path=args.db,
+        dry_run=bool(args.dry_run),
+        verbose=bool(args.verbose),
+    )
+
+    if not stats["files"]:
+        print("No XLS files matched.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Files:                {len(stats['files'])}")
+    print(f"Executions parsed:    {stats['executions_parsed']}")
+    if stats["dry_run"]:
+        print("(dry-run — no DB writes)")
+        return
+    print(f"Executions inserted:  {stats['executions_new']}")
+    print(f"Affected (acct,sym):  {stats.get('affected_pairs', 0)}")
+    print(f"Round-trips computed: {stats['round_trips_computed']}")
+
+
+def cmd_compliance(args):
+    """Thin wrapper that forwards to `falcon-review compliance`.
+
+    Tries the in-process `falcon_review.rules` import first; falls back to
+    a subprocess call against the `falcon-review` CLI if the package is
+    installed but not importable from this env.
+    """
+    import subprocess
+
+    forwarded = ["compliance", args.date]
+    if args.db:
+        forwarded += ["--db", args.db]
+    if args.rules:
+        forwarded += ["--rules", args.rules]
+    if args.json:
+        forwarded += ["--json"]
+
+    try:
+        from falcon_review import rules as _rules  # noqa: F401
+        from falcon_review.cli import main as fr_main  # type: ignore
+
+        sys.exit(fr_main(forwarded))
+    except ImportError:
+        pass
+
+    try:
+        proc = subprocess.run(["falcon-review", *forwarded], check=False)
+        sys.exit(proc.returncode)
+    except FileNotFoundError:
+        print(
+            "falcon-review CLI not found. Install falcon-review and retry.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+
 def cmd_calc(args):
     """Calculate trade cost estimate."""
     from .calculator import estimate_trade
@@ -375,6 +438,35 @@ Examples:
     calc_p.add_argument("target", type=float, help="Target price")
     calc_p.add_argument("stop", type=float, help="Stop loss price")
 
+    compliance_p = sub.add_parser(
+        "compliance",
+        help="Forward to falcon-review compliance <date>",
+    )
+    compliance_p.add_argument("date", help="YYYY-MM-DD")
+    compliance_p.add_argument("--db", default=None, help="Override $FALCON_DB")
+    compliance_p.add_argument("--rules", default=None, help="Override $FALCON_RULES_YAML")
+    compliance_p.add_argument("--json", action="store_true", help="Emit violations JSON")
+
+    refresh_p = sub.add_parser(
+        "refresh-from-xls",
+        help="Ingest broker XLS into SQLite and rebuild affected round-trips",
+    )
+    refresh_p.add_argument("paths", nargs="+", help="XLS file(s) or glob(s)")
+    refresh_p.add_argument(
+        "--db", default=None, help="Override $FALCON_DB / default ~/Projects/Falcon/trades.db"
+    )
+    refresh_p.add_argument(
+        "--dry-run", action="store_true", help="Parse + report counts; no DB writes"
+    )
+    refresh_p.add_argument(
+        "--account",
+        default=None,
+        help="Account label (default: $FALCON_ACCOUNT or 'ACCT')",
+    )
+    refresh_p.add_argument(
+        "--verbose", "-v", action="store_true", help="Per-file row counts"
+    )
+
     size_p = sub.add_parser("size", help="Pre-trade sizer — ATR-based stops and share count")
     size_p.add_argument("symbol", help="Ticker symbol")
     size_p.add_argument("side", choices=["long", "short"], help="Trade direction")
@@ -396,6 +488,8 @@ Examples:
         "backfill": cmd_backfill,
         "rebuild-notion": cmd_rebuild_notion,
         "ingest-broker": cmd_ingest_broker,
+        "refresh-from-xls": cmd_refresh_from_xls,
+        "compliance": cmd_compliance,
         "calc": cmd_calc,
         "size": cmd_size,
     }

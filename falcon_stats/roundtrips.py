@@ -1,126 +1,111 @@
-"""Round-trip identification engine.
+"""Round-trip identification — DEPRECATED legacy shim.
 
-Groups individual trades into complete positions (entry → exit cycles).
-Handles partial fills, scaling in/out, and matches stop orders to entries.
+This module is preserved for backward compatibility with existing CLI
+subcommands (`ingest`, `summary`, `trades`, `week`, `backfill`,
+`ingest-broker`) that pass `list[Trade]` from DAS CSV parsing.
 
-The round-trip is the atomic unit of trading analysis. All statistics
-are computed from round-trips, not individual trades.
+New code should use `falcon_stats.pairing.pair_executions` directly,
+which operates on signed-quantity `ExecutionRow` instances from the
+SQLite canonical store.
+
+The shim converts `list[Trade]` → `list[ExecutionRow]`, runs the canonical
+walker, then re-builds `RoundTrip(entries=..., exits=...)` objects by
+mapping exec_ids back to the original Trades. Stop prices from `orders`
+are matched via the existing `_build_stop_lookup` lookup.
 """
 
-from collections import defaultdict
+from __future__ import annotations
 
-from .models import Trade, Order, RoundTrip, Side
+from collections import defaultdict
+from datetime import datetime
+
+from .models import Order, RoundTrip, Side, Trade
+from .pairing import pair_executions
+from .sqlite_db import ExecutionRow, compute_exec_id
+
+
+def _trades_to_execution_rows(trades: list[Trade]) -> tuple[list[ExecutionRow], dict[str, Trade]]:
+    """Convert legacy Trade objects to ExecutionRow + lookup by exec_id."""
+    rows: list[ExecutionRow] = []
+    lookup: dict[str, Trade] = {}
+    for t in trades:
+        signed_qty = t.quantity if t.side == Side.BUY else -t.quantity
+        trade_datetime = t.time.isoformat(timespec="seconds")
+        trade_date = t.time.strftime("%Y-%m-%d")
+        amount = float(signed_qty) * float(t.price)
+        exec_id = compute_exec_id(
+            account=t.account,
+            trade_datetime=trade_datetime,
+            symbol=t.symbol,
+            quantity=signed_qty,
+            price=float(t.price),
+            amount=amount,
+        )
+        rows.append(
+            ExecutionRow(
+                exec_id=exec_id,
+                account=t.account,
+                trade_date=trade_date,
+                trade_datetime=trade_datetime,
+                quantity=signed_qty,
+                symbol=t.symbol,
+                description=None,
+                price=float(t.price),
+                trans_fee=0.0,
+                ecn_taker=0.0,
+                ecn_maker=0.0,
+                orf_fee=0.0,
+                taf_fee=0.0,
+                sec_fee=0.0,
+                cat_fee=0.0,
+                amount=amount,
+                type="Short" if t.is_short else None,
+                commissions=0.0,
+                source_file="<das-csv-legacy>",
+            )
+        )
+        lookup[exec_id] = t
+    return rows, lookup
 
 
 def identify_round_trips(
     trades: list[Trade],
     orders: list[Order] | None = None,
 ) -> list[RoundTrip]:
-    """Group trades into round-trip positions.
+    """DEPRECATED legacy API. Delegates to `pairing.pair_executions`.
 
-    Algorithm:
-    1. Group trades by symbol and account
-    2. For each group, walk chronologically
-    3. Buys increase position, sells decrease (for longs)
-    4. When position returns to zero, close the round-trip
-    5. Match stop orders from Orders.csv to determine planned risk
-
-    Handles:
-    - Scaling in (multiple entries before exit)
-    - Scaling out (partial exits)
-    - Multiple round-trips on the same symbol in one day
-    - Long and short positions
+    Preserved signature: takes legacy Trade list, optional Orders. Returns
+    a list of legacy RoundTrip dataclass instances.
     """
-    # Build stop price lookup from orders
+    if not trades:
+        return []
+
+    rows, lookup = _trades_to_execution_rows(trades)
+    results = pair_executions(rows)
+
     stop_lookup = _build_stop_lookup(orders) if orders else {}
 
-    # Group trades by (account, symbol)
-    groups: dict[tuple[str, str], list[Trade]] = defaultdict(list)
-    for trade in sorted(trades, key=lambda t: t.time):
-        groups[(trade.account, trade.symbol)].append(trade)
-
-    round_trips = []
-    for (account, symbol), symbol_trades in groups.items():
-        round_trips.extend(
-            _process_symbol_trades(account, symbol, symbol_trades, stop_lookup)
-        )
-
-    return sorted(round_trips, key=lambda rt: rt.entry_time)
-
-
-def _process_symbol_trades(
-    account: str,
-    symbol: str,
-    trades: list[Trade],
-    stop_lookup: dict,
-) -> list[RoundTrip]:
-    """Process all trades for a single symbol into round-trips."""
-    round_trips = []
-    position = 0  # positive = long, negative = short
-    current_entries: list[Trade] = []
-    current_exits: list[Trade] = []
-
-    for trade in trades:
-        if trade.side == Side.BUY:
-            delta = trade.quantity
-        else:
-            delta = -trade.quantity
-
-        new_position = position + delta
-
-        # Determine if this trade is an entry or exit
-        if position == 0:
-            # Opening a new position
-            current_entries.append(trade)
-        elif (position > 0 and delta > 0) or (position < 0 and delta < 0):
-            # Adding to existing position (scaling in)
-            current_entries.append(trade)
-        elif (position > 0 and delta < 0) or (position < 0 and delta > 0):
-            # Reducing position (exit or partial exit)
-            current_exits.append(trade)
-
-        position = new_position
-
-        # Position closed — create round-trip
-        if position == 0 and current_entries:
-            side = Side.BUY if current_entries[0].side == Side.BUY else Side.SELL
-            planned_stop = _find_stop(account, symbol, current_entries, stop_lookup)
-
-            rt = RoundTrip(
-                symbol=symbol,
-                account=account,
+    rts: list[RoundTrip] = []
+    for r in results:
+        entries = [lookup[eid] for eid in r.entry_exec_ids if eid in lookup]
+        exits = [lookup[eid] for eid in r.exit_exec_ids if eid in lookup]
+        side = Side.BUY if r.side == "LONG" else Side.SELL
+        planned_stop = _find_stop(r.account, r.symbol, entries, stop_lookup)
+        rts.append(
+            RoundTrip(
+                symbol=r.symbol,
+                account=r.account,
                 side=side,
-                entries=list(current_entries),
-                exits=list(current_exits),
+                entries=entries,
+                exits=exits,
                 planned_stop=planned_stop,
             )
-            round_trips.append(rt)
-            current_entries.clear()
-            current_exits.clear()
-
-    # Handle unclosed position (still holding at end of data)
-    if current_entries and position != 0:
-        side = Side.BUY if current_entries[0].side == Side.BUY else Side.SELL
-        planned_stop = _find_stop(account, symbol, current_entries, stop_lookup)
-        rt = RoundTrip(
-            symbol=symbol,
-            account=account,
-            side=side,
-            entries=list(current_entries),
-            exits=list(current_exits),
-            planned_stop=planned_stop,
         )
-        round_trips.append(rt)
 
-    return round_trips
+    return sorted(rts, key=lambda rt: rt.entry_time if rt.entries else datetime.min)
 
 
 def _build_stop_lookup(orders: list[Order]) -> dict[tuple[str, str], list[float]]:
-    """Build lookup of stop prices by (account, symbol).
-
-    Returns all stop prices for each symbol so we can match them
-    to entries by proximity in time.
-    """
     lookup: dict[tuple[str, str], list[float]] = defaultdict(list)
     for order in orders:
         if order.stop_price is not None:
@@ -134,13 +119,7 @@ def _find_stop(
     entries: list[Trade],
     stop_lookup: dict[tuple[str, str], list[float]],
 ) -> float | None:
-    """Find the planned stop price for a position.
-
-    Uses the first stop order found for this symbol. In practice,
-    the stop is usually set with the first entry order.
-    """
     stops = stop_lookup.get((account, symbol), [])
     if not stops:
         return None
-    # Return the first stop price — typically set with initial entry
     return stops[0]
