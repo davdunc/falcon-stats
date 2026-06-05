@@ -333,7 +333,15 @@ def _print_summary(stats: DailyStats):
     else:
         print(f"  Avg R:         N/A (no stops found)")
 
-    print(f"  Max Drawdown:  ${stats.max_drawdown:.2f}")
+    peak_t = stats.peak_equity_time
+    trough_t = stats.trough_equity_time
+    dd_t = stats.max_drawdown_time
+    peak_t_str = peak_t.strftime("%H:%M:%S") if peak_t else "—"
+    trough_t_str = trough_t.strftime("%H:%M:%S") if trough_t else "—"
+    dd_t_str = dd_t.strftime("%H:%M:%S") if dd_t else "—"
+    print(f"  Peak Equity:   ${stats.peak_equity:+.2f}  @ {peak_t_str}")
+    print(f"  Trough Equity: ${stats.trough_equity:+.2f}  @ {trough_t_str}")
+    print(f"  Max Drawdown:  ${stats.max_drawdown:.2f}  @ {dd_t_str}")
     print(f"  Streak:        {streak_count}{streak_type}")
     print(f"{'─'*50}")
 

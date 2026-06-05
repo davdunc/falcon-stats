@@ -239,20 +239,82 @@ class DailyStats:
             return None
         return sum(rs) / len(rs)
 
-    @property
-    def max_drawdown(self) -> float:
-        """Maximum drawdown from cumulative P&L curve."""
+    def _equity_curve_stats(self) -> dict:
+        """Walk the cumulative P&L curve once, return peak/trough/drawdown stats.
+
+        Cached per access — small N, cheap to recompute.
+        Returns: {peak, peak_time, trough, trough_time, max_drawdown, max_drawdown_time}.
+        Peak/trough are vs. session start (0.0). Trough may be negative.
+        max_drawdown is peak-to-trough; max_drawdown_time is when the post-peak trough hit.
+        """
         if not self.round_trips:
-            return 0.0
+            return {
+                "peak": 0.0, "peak_time": None,
+                "trough": 0.0, "trough_time": None,
+                "max_drawdown": 0.0, "max_drawdown_time": None,
+            }
+
         cumulative = 0.0
         peak = 0.0
+        peak_time = None
+        trough = 0.0
+        trough_time = None
+        running_peak = 0.0
         max_dd = 0.0
+        max_dd_time = None
+
         for rt in sorted(self.round_trips, key=lambda r: r.entry_time):
             cumulative += rt.pnl
-            peak = max(peak, cumulative)
-            dd = peak - cumulative
-            max_dd = max(max_dd, dd)
-        return max_dd
+            mark_time = rt.exit_time or rt.entry_time
+
+            if cumulative > peak:
+                peak = cumulative
+                peak_time = mark_time
+            if cumulative < trough:
+                trough = cumulative
+                trough_time = mark_time
+
+            running_peak = max(running_peak, cumulative)
+            dd = running_peak - cumulative
+            if dd > max_dd:
+                max_dd = dd
+                max_dd_time = mark_time
+
+        return {
+            "peak": peak, "peak_time": peak_time,
+            "trough": trough, "trough_time": trough_time,
+            "max_drawdown": max_dd, "max_drawdown_time": max_dd_time,
+        }
+
+    @property
+    def peak_equity(self) -> float:
+        """Highest cumulative P&L reached during the day (high-water mark)."""
+        return self._equity_curve_stats()["peak"]
+
+    @property
+    def peak_equity_time(self) -> datetime | None:
+        """When the peak equity was hit."""
+        return self._equity_curve_stats()["peak_time"]
+
+    @property
+    def trough_equity(self) -> float:
+        """Lowest cumulative P&L reached during the day (deepest red, can be negative)."""
+        return self._equity_curve_stats()["trough"]
+
+    @property
+    def trough_equity_time(self) -> datetime | None:
+        """When the trough equity was hit."""
+        return self._equity_curve_stats()["trough_time"]
+
+    @property
+    def max_drawdown(self) -> float:
+        """Maximum peak-to-trough drawdown on the cumulative P&L curve."""
+        return self._equity_curve_stats()["max_drawdown"]
+
+    @property
+    def max_drawdown_time(self) -> datetime | None:
+        """When the max drawdown bottomed (the trough after the running peak)."""
+        return self._equity_curve_stats()["max_drawdown_time"]
 
     @property
     def streak(self) -> tuple[int, str]:
@@ -271,13 +333,13 @@ class DailyStats:
 
     def to_dict(self, sanitized: bool = False) -> dict:
         streak_count, streak_type = self.streak
+        curve = self._equity_curve_stats()
         base = {
             "date": self.date,
             "total_trades": self.total_trades,
             "win_rate": round(self.win_rate, 3),
             "profit_factor": round(self.profit_factor, 2) if self.profit_factor != float("inf") else "inf",
             "avg_r": round(self.avg_r, 2) if self.avg_r is not None else None,
-            "avg_r": round(self.expectancy_r, 2) if self.expectancy_r is not None else None,
             "max_drawdown_r": None,  # TODO: compute in R terms
             "streak": f"{streak_count}{streak_type}",
             "round_trips": [rt.to_dict(sanitized=sanitized) for rt in self.round_trips],
@@ -292,7 +354,12 @@ class DailyStats:
                 "avg_winner": round(self.avg_winner, 2),
                 "avg_loser": round(self.avg_loser, 2),
                 "expectancy": round(self.expectancy, 2),
-                "max_drawdown": round(self.max_drawdown, 2),
+                "peak_equity": round(curve["peak"], 2),
+                "peak_equity_time": curve["peak_time"].isoformat() if curve["peak_time"] else None,
+                "trough_equity": round(curve["trough"], 2),
+                "trough_equity_time": curve["trough_time"].isoformat() if curve["trough_time"] else None,
+                "max_drawdown": round(curve["max_drawdown"], 2),
+                "max_drawdown_time": curve["max_drawdown_time"].isoformat() if curve["max_drawdown_time"] else None,
             })
 
         return base

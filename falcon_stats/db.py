@@ -122,6 +122,9 @@ def put_daily_stats(stats: DailyStats) -> dict:
     streak_count, streak_type = stats.streak
     pf = stats.profit_factor
     pf_val = _to_decimal(pf) if pf != float("inf") else Decimal("999999")
+    peak_time = stats.peak_equity_time
+    trough_time = stats.trough_equity_time
+    dd_time = stats.max_drawdown_time
 
     item = {
         "PK": f"STATS#{stats.date}",
@@ -138,7 +141,12 @@ def put_daily_stats(stats: DailyStats) -> dict:
         "expectancy": _to_decimal(stats.expectancy),
         "profit_factor": pf_val,
         "avg_r": _to_decimal(stats.avg_r),
+        "peak_equity": _to_decimal(stats.peak_equity),
+        "peak_equity_time": peak_time.isoformat() if peak_time else None,
+        "trough_equity": _to_decimal(stats.trough_equity),
+        "trough_equity_time": trough_time.isoformat() if trough_time else None,
         "max_drawdown": _to_decimal(stats.max_drawdown),
+        "max_drawdown_time": dd_time.isoformat() if dd_time else None,
         "winners": len(stats.winners),
         "losers": len(stats.losers),
         "streak": f"{streak_count}{streak_type}",
