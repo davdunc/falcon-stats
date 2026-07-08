@@ -1,0 +1,55 @@
+# compose.yaml — podman-compose spec that boots the Ralph coding agent in a krun microVM.
+#
+# Run via the wrapper (sandbox/run-ralph-sandboxed.sh), which exports HOST_UID/HOST_GID
+# and injects secrets from a gitignored .env. Do NOT `podman-compose up` this as a
+# daemon — the agent is a one-shot, run with `podman-compose run --rm`.
+#
+# krun annotations turn the container into a microVM (own kernel behind a hypervisor).
+# Requires: podman, crun-krun (libkrun >= 1.8), podman-compose, and /dev/kvm on the host.
+
+services:
+  ralph:
+    build:
+      context: .
+      dockerfile: Containerfile.agent
+      args:
+        # Match the image's build-time user to the host user for clean file ownership.
+        APP_UID: "${HOST_UID:-1000}"
+        APP_GID: "${HOST_GID:-1000}"
+    image: localhost/falcon-ralph-sandbox:latest
+
+    annotations:
+      # This is what makes it a microVM instead of a normal container.
+      run.oci.handler: krun
+      # Defaults are too small and cause OOM kills during builds/tests — size up.
+      krun.ram_mib: "4096"
+      krun.cpus: "4"
+
+    # Reconcile in-VM user with the host user so files written to the mount are owned
+    # by you, not root. keep-id maps the namespace; combined with `user:` below.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    userns_mode: keep-id
+
+    # pids limit caps a runaway/compromised agent (fork bomb / miner) inside the VM.
+    pids_limit: 512
+
+    volumes:
+      # `..` resolves to the falcon-stats REPO ROOT (this compose file lives in
+      # falcon-stats/sandbox/). We mount the repo ONLY — never the Falcon parent tree.
+      # `:z` = shared SELinux relabel. We deliberately DO NOT use `:U` (recursive
+      # chown) — keep-id already maps UIDs, and `:U` would rewrite host ownership.
+      - ../:/app:z
+      # Persistent Claude Code OAuth/session state across iterations. Holds CREDS ONLY;
+      # agent settings/hooks are baked read-only into the image, not sourced from here.
+      - claude-config:/home/appuser/.claude:z
+
+    # Secrets are injected at runtime from a gitignored env-file — never baked into the
+    # image. This file holds a fine-grained, repo-scoped GH_TOKEN and (optionally) an
+    # ANTHROPIC_API_KEY. It contains NO AWS credentials by design.
+    env_file:
+      - .env
+
+    working_dir: /app
+
+volumes:
+  claude-config:
