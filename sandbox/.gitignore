@@ -1,0 +1,10 @@
+# Runtime secrets — never commit.
+.env
+*.env
+!.env.example
+
+# Local credential material that must never enter the image or git history.
+*.pem
+*.key
+gh-token*
+aws-*

@@ -1,0 +1,61 @@
+# Containerfile.agent — microVM sandbox image for the Ralph coding agent.
+#
+# This image runs the falcon-stats Ralph loop (Claude Code) inside a krun microVM
+# so the agent's arbitrary git/gh/build/test commands run behind their own kernel,
+# not the host's. Built for Fedora and portable to bare-metal Fedora and Fedora-WSL.
+#
+# SECURITY NOTES (see sandbox/README.md for the full threat model):
+#   - No secrets are baked in. GH_TOKEN / ANTHROPIC_API_KEY are injected at RUNTIME
+#     only (via a gitignored env-file), never as ARG/ENV here — ARG/ENV land in layers.
+#   - The microVM always boots as root and ignores the USER directive; entrypoint.sh
+#     (baked in below, NOT taken from the mounted repo) drops to appuser at boot.
+#   - This image deliberately contains NO AWS credentials and no aws CLI. The coding
+#     agent develops code; only the falcon-stats *runtime* container needs AWS.
+
+FROM registry.fedoraproject.org/fedora:44
+
+LABEL maintainer="David Duncan <davdunc>"
+LABEL description="Sandbox image: runs the falcon-stats Ralph coding agent inside a krun microVM"
+
+# Toolchain the Ralph loop needs: git + gh (issue/PR/push), tar/which for installers,
+# nodejs for the Claude Code CLI, and a timeout-friendly coreutils base.
+RUN dnf install -y --setopt=install_weak_deps=False \
+        git gh nodejs npm ca-certificates tar findutils procps-ng \
+        python3 \
+    && dnf clean all
+
+# Create an unprivileged user. The microVM boots as root regardless (see entrypoint),
+# so we hand off to this account. UID/GID are reconciled to the host at runtime via
+# compose `user:` + `userns_mode: keep-id`; 1000 is the build-time default.
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd -g "${APP_GID}" appuser \
+    && useradd -m -u "${APP_UID}" -g "${APP_GID}" -s /bin/bash appuser
+
+# uv package manager (astral) — installed into appuser's home, on PATH below.
+USER appuser
+WORKDIR /home/appuser
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Claude Code CLI. Single install method (npm) with an explicit user-owned global prefix,
+# so the PATH entry below is real and the layer is reproducible. npm cache is purged to
+# keep it out of the image. OAuth creds live in the runtime claude-config volume, not here.
+RUN mkdir -p /home/appuser/.npm-global \
+    && npm config set prefix /home/appuser/.npm-global \
+    && npm install -g @anthropic-ai/claude-code \
+    && npm cache clean --force
+
+# uv installs to ~/.local/bin; Claude Code to the npm global prefix — both ahead of system.
+ENV PATH="/home/appuser/.local/bin:/home/appuser/.npm-global/bin:${PATH}"
+
+# Bake the entrypoint into the image as root-owned. It must NOT be sourced from the
+# /app mount — the agent can write to that mount, and a mutable entrypoint would let a
+# compromised iteration keep root on the next boot.
+USER root
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chown root:root /usr/local/bin/entrypoint.sh && chmod 0755 /usr/local/bin/entrypoint.sh
+
+WORKDIR /app
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+# Default command: run a single Ralph iteration. Overridable at `compose run`.
+CMD ["ralph-once"]
