@@ -14,14 +14,46 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from . import db
 from .parser import load_day
 from .roundtrips import identify_round_trips
 from .models import DailyStats
 
-TRADE_REVIEW_PATH = Path(os.getenv(
-    "TRADE_REVIEW_PATH",
-    "/mnt/c/Users/davdunc/OneDrive/Desktop/Trade_Review",
-))
+def _env_file_value(key: str) -> str | None:
+    """Read one key from the LifeOS env file.
+
+    cli.py previously used a bare os.getenv, so setting TRADE_REVIEW_PATH in
+    ~/.claude/.env had no effect — only an exported shell variable worked, which
+    is not where the rest of the config lives. db.py already reads that file;
+    this keeps the two consistent.
+    """
+    for candidate in ("~/.claude/.env", "~/.env"):
+        path = Path(candidate).expanduser()
+        if not path.exists():
+            continue
+        for line in path.read_text().splitlines():
+            line = line.strip().removeprefix("export ")
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            if k.strip() != key:
+                continue
+            v = v.strip()
+            if " #" in v:
+                v = v.split(" #", 1)[0].rstrip()
+            return v.strip('"').strip("'") or None
+    return None
+
+
+# Resolution order: exported shell var -> ~/.claude/.env -> default.
+# The default was previously a hardcoded personal path that does not exist on
+# any current machine (wrong Windows user AND the retired export root). DAS
+# moved from Desktop/Trade_Review to Documents/Morning_Review on 2026-07-01.
+TRADE_REVIEW_PATH = Path(
+    os.getenv("TRADE_REVIEW_PATH")
+    or _env_file_value("TRADE_REVIEW_PATH")
+    or str(Path.home() / "Trade_Review")
+)
 
 
 def cmd_ingest(args):
@@ -118,15 +150,38 @@ def cmd_trades(args):
     base = TRADE_REVIEW_PATH
     year_month = date[:7]
     day_dir = base / year_month / date
-    if not day_dir.exists():
-        print(f"No trade data found for {date}", file=sys.stderr)
-        sys.exit(1)
 
-    trades, orders = load_day(day_dir)
-    round_trips = identify_round_trips(trades, orders)
+    if day_dir.exists():
+        trades, orders = load_day(day_dir)
+        rows = [rt.to_dict(sanitized=sanitized)
+                for rt in identify_round_trips(trades, orders)]
+    else:
+        # DynamoDB is the system of record for whether/when a trade happened;
+        # the local DAS export folders only exist on the machine that did the
+        # ingest. Falling back keeps this command working on every machine
+        # instead of reporting "no trades" for a day that certainly had them.
+        from . import db
+        items = db.get_round_trips(date)
+        if not items:
+            print(f"No trade data found for {date} "
+                  f"(checked {day_dir} and DynamoDB)", file=sys.stderr)
+            sys.exit(1)
+        print(f"  [source: DynamoDB — no local export at {day_dir}]", file=sys.stderr)
+        rows = []
+        for i in items:
+            r = i.get("r_multiple")
+            rows.append({
+                "symbol": i.get("symbol", "?"),
+                "side": i.get("side", "?"),
+                "shares": int(i.get("shares", 0)),
+                "r_multiple": float(r) if r is not None else None,
+                "is_winner": bool(i.get("is_winner")),
+                "pnl": float(i.get("pnl", 0)),
+                "avg_entry": float(i.get("avg_entry", 0)),
+                "avg_exit": float(i.get("avg_exit", 0)),
+            })
 
-    for rt in round_trips:
-        d = rt.to_dict(sanitized=sanitized)
+    for d in rows:
         side_label = d["side"]
         r_str = f"{d['r_multiple']:+.1f}R" if d["r_multiple"] is not None else "N/A"
 
@@ -417,7 +472,14 @@ Examples:
         "size": cmd_size,
     }
 
-    commands[args.command](args)
+    try:
+        commands[args.command](args)
+    except db.CredentialError as exc:
+        # Surface auth problems as auth problems. Letting these escape as a
+        # traceback — or worse, as an empty result — is how "I could not
+        # authenticate" gets read as "you did not trade that day".
+        print(f"\nAWS credential error: {exc}\n", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

@@ -24,14 +24,64 @@ from .models import RoundTrip, DailyStats, Side
 TABLE_NAME = os.getenv("FALCON_TRADES_TABLE", "falcon-trades")
 REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-2")
 
+# Which credentials to use. The ambient default profile is NOT safe to fall back
+# to: it belongs to a different AWS account, where `falcon-trades` does not
+# exist. A query there does not error — it returns zero rows, which every caller
+# renders as "no trades that day". A wrong-account read is therefore worse than
+# an auth failure, because it is silent and looks like a fact about trading.
+PROFILE = os.getenv("FALCON_AWS_PROFILE") or os.getenv("AWS_PROFILE") or ""
+
+# Optional guard: set FALCON_AWS_ACCOUNT to the account id that owns the table
+# and every session is verified against it before any read. Left unset by
+# default so the account id is not baked into the repo.
+EXPECTED_ACCOUNT = os.getenv("FALCON_AWS_ACCOUNT", "")
+
 _table = None
+
+
+class CredentialError(RuntimeError):
+    """Raised when credentials are missing, expired, or for the wrong account."""
+
+
+def _session():
+    if not PROFILE:
+        return boto3.Session()
+    try:
+        return boto3.Session(profile_name=PROFILE)
+    except Exception as exc:                      # ProfileNotFound and friends
+        raise CredentialError(
+            f"AWS profile {PROFILE!r} could not be loaded ({exc}). Set "
+            f"FALCON_AWS_PROFILE or AWS_PROFILE to a profile with access to "
+            f"{TABLE_NAME} in {REGION}.") from exc
+
+
+def _verify_account(session) -> None:
+    if not EXPECTED_ACCOUNT:
+        return
+    try:
+        acct = session.client("sts", region_name=REGION).get_caller_identity()["Account"]
+    except Exception as exc:
+        raise CredentialError(
+            f"Could not verify AWS identity for {TABLE_NAME}: {exc}") from exc
+    if acct != EXPECTED_ACCOUNT:
+        raise CredentialError(
+            f"Wrong AWS account: credentials resolve to {acct}, expected "
+            f"{EXPECTED_ACCOUNT}. {TABLE_NAME} does not exist in {acct}, so "
+            f"queries would return zero rows and read as 'no trades'. "
+            f"Set AWS_PROFILE to the account that owns the table.")
 
 
 def _get_table():
     global _table
     if _table is None:
-        dynamodb = boto3.resource("dynamodb", region_name=REGION)
-        _table = dynamodb.Table(TABLE_NAME)
+        session = _session()
+        _verify_account(session)
+        if session.get_credentials() is None:
+            raise CredentialError(
+                f"No AWS credentials available for {TABLE_NAME} in {REGION}. "
+                f"Export AWS_PROFILE (or FALCON_AWS_PROFILE) before running — "
+                f"without it this cannot distinguish 'no trades' from 'no access'.")
+        _table = session.resource("dynamodb", region_name=REGION).Table(TABLE_NAME)
     return _table
 
 

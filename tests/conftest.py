@@ -14,6 +14,36 @@ from moto import mock_aws
 from falcon_stats import db
 
 
+@pytest.fixture(autouse=True)
+def isolate_aws_env(monkeypatch):
+    """Detach every test from the developer's real AWS configuration.
+
+    moto intercepts the API calls, but boto3 still resolves credentials and the
+    profile from the ambient environment first. Without this the suite inherits
+    whatever the machine happens to have exported, and fails in two ways that
+    have nothing to do with the code under test:
+
+      * AWS_PROFILE pointing at a profile that does not exist on a CI box or a
+        teammate's laptop -> ProfileNotFound at fixture setup.
+      * FALCON_AWS_ACCOUNT set to the real account -> db._verify_account
+        compares it against moto's fake 123456789012 and raises CredentialError.
+
+    Both were reproduced locally on 2026-07-29. Pinning fake credentials here is
+    the standard moto practice and keeps the account guard testable on its own
+    terms rather than firing as a side effect of the developer's shell.
+    """
+    for var in ("AWS_PROFILE", "FALCON_AWS_PROFILE", "FALCON_AWS_ACCOUNT",
+                "AWS_SESSION_TOKEN", "AWS_SECURITY_TOKEN"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-2")
+    # db caches PROFILE/EXPECTED_ACCOUNT at import; re-read them per test.
+    monkeypatch.setattr(db, "PROFILE", "", raising=False)
+    monkeypatch.setattr(db, "EXPECTED_ACCOUNT", "", raising=False)
+    monkeypatch.setattr(db, "_table", None, raising=False)
+
+
 SAMPLE_ROUND_TRIPS: list[dict] = [
     {
         "PK": "TRADE#2026-05-04",
