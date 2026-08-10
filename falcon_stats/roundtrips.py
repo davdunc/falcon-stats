@@ -9,6 +9,7 @@ are computed from round-trips, not individual trades.
 
 from dataclasses import replace
 from collections import defaultdict
+from datetime import datetime, timedelta
 
 from .models import Trade, Order, RoundTrip, Side
 
@@ -166,16 +167,30 @@ def _process_symbol_trades(
     return round_trips
 
 
-def _build_stop_lookup(orders: list[Order]) -> dict[tuple[str, str], list[float]]:
-    """Build lookup of stop prices by (account, symbol).
+def _build_stop_lookup(
+    orders: list[Order],
+) -> dict[tuple[str, str], list[tuple[datetime, Side, float]]]:
+    """Build lookup of stop orders by (account, symbol), keeping time and side.
 
-    Returns all stop prices for each symbol so we can match them
-    to entries by proximity in time.
+    Time and side are required to match a stop to the position it actually
+    protects. The previous implementation stored bare prices and returned the
+    first one for the symbol, which meant a single stop was reused for every
+    round-trip in that name for the whole session, in both directions.
+
+    Concretely: on 2026-07-28 one INTC stop at 86.95 was applied to all 18 INTC
+    round-trips, longs and shorts, on entries from 86.76 to 87.37. That produced
+    risk-per-share as low as $0.03 and an R of +10.0 on a $0.60 gain. R was
+    unusable corpus-wide as a result.
     """
-    lookup: dict[tuple[str, str], list[float]] = defaultdict(list)
+    lookup: dict[tuple[str, str], list[tuple[datetime, Side, float]]] = defaultdict(list)
     for order in orders:
-        if order.stop_price is not None:
-            lookup[(order.account, order.symbol)].append(order.stop_price)
+        if order.stop_price is None:
+            continue
+        lookup[(order.account, order.symbol)].append(
+            (order.time, order.side, order.stop_price)
+        )
+    for key in lookup:
+        lookup[key].sort(key=lambda t: t[0])
     return lookup
 
 
@@ -183,15 +198,54 @@ def _find_stop(
     account: str,
     symbol: str,
     entries: list[Trade],
-    stop_lookup: dict[tuple[str, str], list[float]],
+    stop_lookup: dict[tuple[str, str], list[tuple[datetime, Side, float]]],
 ) -> float | None:
-    """Find the planned stop price for a position.
+    """Find the stop that actually protected THIS position, or None.
 
-    Uses the first stop order found for this symbol. In practice,
-    the stop is usually set with the first entry order.
+    Matching rules, in order:
+
+      1. **Direction.** A long is protected by a SELL stop; a short by a BUY
+         stop. Applying a long's stop to a short inverts the risk and is how
+         the old code produced negative or absurd risk-per-share.
+      2. **Time.** The stop must have been placed at or before the position was
+         closed, and no earlier than one session before the first entry — a stop
+         set yesterday still protects a position carried overnight, but a stop
+         set three weeks ago does not. The latest qualifying stop wins, since
+         re-stopping a position supersedes the original.
+      3. **Sanity.** The stop must sit on the correct side of the entry (below
+         for a long, above for a short) and imply non-zero risk. A "stop" on the
+         wrong side is a target or a stale artifact, not risk.
+
+    Returns **None** when no stop qualifies. That is the important behaviour
+    change: the previous version always returned something if the symbol had any
+    stop at all, which manufactured an R-multiple for trades that were never
+    stopped. A trade taken without a stop has no defined risk, so it has no R —
+    and reporting None is honest where reporting a number is not.
     """
     stops = stop_lookup.get((account, symbol), [])
-    if not stops:
+    if not stops or not entries:
         return None
-    # Return the first stop price — typically set with initial entry
-    return stops[0]
+
+    entry_time = min(e.time for e in entries)
+    last_time = max(e.time for e in entries)
+    avg_entry = sum(e.price * e.quantity for e in entries) / sum(
+        e.quantity for e in entries
+    )
+    is_long = entries[0].side == Side.BUY
+    protects = Side.SELL if is_long else Side.BUY
+
+    # One session of lookback so an overnight carry keeps yesterday's stop.
+    earliest = entry_time - timedelta(days=1)
+
+    best: float | None = None
+    for placed, side, price in stops:
+        if side != protects:
+            continue
+        if placed > last_time or placed < earliest:
+            continue
+        if is_long and price >= avg_entry:
+            continue
+        if not is_long and price <= avg_entry:
+            continue
+        best = price          # stops are time-sorted; the last match is latest
+    return best
