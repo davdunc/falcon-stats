@@ -1,7 +1,7 @@
 # RALPH_PROMPT.md
 
 You are an agent operating on the **falcon-stats** repository at
-`/mnt/c/Users/davdunc/Projects/Falcon/falcon-stats`. You are invoked
+the falcon-stats repository root. You are invoked
 repeatedly by the Ralph loop. Each invocation is one iteration. Treat
 git as your only durable state — assume **nothing** about previous
 iterations beyond what is committed to `main` or visible in open PRs.
