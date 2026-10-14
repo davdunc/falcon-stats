@@ -346,6 +346,29 @@ def _print_summary(stats: DailyStats):
     print(f"{'─'*50}")
 
 
+def cmd_avwap_study(args):
+    """Event-anchored VWAP support/resistance study (see falcon_stats/avwap.py)."""
+    import json as _json
+    from dataclasses import asdict
+    from datetime import date as _date
+
+    from falcon_stats.avwap import (fetch_daily_bars, fetch_event_dates, intraday_study, render,
+                                    render_intraday, study)
+
+    until = args.until or _date.today().isoformat()
+    events = [d for d in fetch_event_dates(args.event, args.since) if d < until]
+    if args.intraday:
+        r = intraday_study(args.symbol, args.event, events, minutes=args.minutes, min_age=args.min_age)
+        print(_json.dumps(asdict(r), indent=2) if args.json else render_intraday(r, args.event))
+        return
+    bars = fetch_daily_bars(args.symbol, args.since, until)
+    result = study(args.symbol, bars, events, min_age=args.min_age, window=args.window)
+    if args.json:
+        print(_json.dumps(asdict(result), indent=2))
+    else:
+        print(render(result, args.event, args.window, args.ref))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Falcon Stats — Trading Statistics Manager",
@@ -398,6 +421,20 @@ Examples:
     size_p.add_argument("entry", type=float, help="Planned entry price")
     size_p.add_argument("--risk", type=float, default=280.0, help="Max risk in dollars (default: $280)")
 
+    avwap_p = sub.add_parser("avwap-study", help="Do event-anchored VWAPs (e.g. CPI) act as support/resistance?")
+    avwap_p.add_argument("symbol", help="Ticker symbol")
+    avwap_p.add_argument("--event", default="cpi", choices=["cpi"], help="Anchor event (FRED release)")
+    avwap_p.add_argument("--since", default="2022-01-01", help="Start of history (YYYY-MM-DD)")
+    avwap_p.add_argument("--until", help="End of history, exclusive of event days on/after it (default: today)")
+    avwap_p.add_argument("--window", type=int, default=250, help="Sessions after each anchor to evaluate")
+    avwap_p.add_argument("--min-age", type=int, default=3, help="Sessions before a new line counts")
+    avwap_p.add_argument("--ref", type=float, help="Reference price for the distance column (default: last close)")
+    avwap_p.add_argument("--json", action="store_true", help="Emit the full result as JSON")
+    avwap_p.add_argument("--intraday", action="store_true",
+                         help="Test the announcement window (event day + next session) on intraday bars, "
+                              "against the same weekday one week earlier; 2 requests per event")
+    avwap_p.add_argument("--minutes", type=int, default=5, help="Intraday bar size for --intraday")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -415,6 +452,7 @@ Examples:
         "ingest-broker": cmd_ingest_broker,
         "calc": cmd_calc,
         "size": cmd_size,
+        "avwap-study": cmd_avwap_study,
     }
 
     commands[args.command](args)
