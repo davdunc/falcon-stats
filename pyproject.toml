@@ -2,6 +2,7 @@
 name = "falcon-stats"
 version = "0.1.0"
 description = "Trading statistics manager — ingest, compute, store, publish"
+license = {text = "GPL-3.0-or-later"}
 requires-python = ">=3.11"
 dependencies = [
     "boto3>=1.42",
